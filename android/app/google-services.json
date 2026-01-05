@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "483259448504",
+    "project_id": "social-feed-app-2025",
+    "storage_bucket": "social-feed-app-2025.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:483259448504:android:6aa3eaa6e5036080d5084d",
+        "android_client_info": {
+          "package_name": "cuong.vn.socail"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "483259448504-3pdpccladucg1gkg3fmt74c6c5a7oin8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "cuong.vn.socail",
+            "certificate_hash": "78825103e65713b781893f9be7bf2d3bf9029ab5"
+          }
+        },
+        {
+          "client_id": "483259448504-03qs6vt0lila7kmqqlip5et8i3uj9qsm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDPx4JkQR8D30jKUd9u_0sh6Td3Vqz8zE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "483259448504-03qs6vt0lila7kmqqlip5et8i3uj9qsm.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

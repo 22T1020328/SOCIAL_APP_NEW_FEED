@@ -1,0 +1,97 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper function để check authentication
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    
+    // Kiểm tra xem có phải admin không - Check trực tiếp từ users collection
+    function isAdmin() {
+      return isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('is_admin', false) == true;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if true; // Anyone can read user profiles
+      
+      // TEMPORARY: Allow create any user when signed in (for import)
+      allow create: if isSignedIn();
+      
+      // Allow user to update their own profile (nhưng không cho sửa is_verified và is_admin)
+      allow update: if isOwner(userId) && (
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_verified', 'is_admin'])
+      );
+      
+      // Admin có thể update bất kỳ user nào (bao gồm is_verified)
+      allow update: if isAdmin();
+      
+      // Admin có thể xóa user
+      allow delete: if isAdmin();
+    }
+    
+    // Payment transactions collection - để tracking thanh toán
+    match /payment_transactions/{transactionId} {
+      allow read: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.user_id == request.auth.uid;
+      allow update: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+      allow delete: if isAdmin(); // Chỉ admin mới được xóa
+    }
+    
+    // Posts collection
+    match /posts/{postId} {
+      allow read: if true; // Anyone can read posts
+      // TEMPORARY: Allow create any post when signed in (for import)
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && 
+        (resource.data.user_id == request.auth.uid || isAdmin());
+    }
+
+    // Post likes collection
+    match /post_likes/{likeId} {
+      allow read: if true;
+      allow create, delete: if isSignedIn() || isAdmin();
+    }
+
+    // Comments collection
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && 
+        (resource.data.user_id == request.auth.uid || isAdmin());
+    }
+
+    // Comment likes collection
+    match /comment_likes/{likeId} {
+      allow read: if true;
+      allow create, delete: if isSignedIn() || isAdmin();
+    }
+
+    // Notifications collection
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isSignedIn() && (resource.data.user_id == request.auth.uid || isAdmin());
+    }
+
+    // User settings collection
+    match /user_settings/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // Follows collection (user relationships)
+    match /follows/{followId} {
+      allow read: if true; // Anyone can read follow relationships
+      allow create: if isSignedIn() && 
+        request.resource.data.follower_user_id == request.auth.uid; // User can only create follows where they are the follower
+      allow delete: if isSignedIn() && 
+        (resource.data.follower_user_id == request.auth.uid || isAdmin()); // User can delete their own follows, admin can delete any
+    }
+  }
+}

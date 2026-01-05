@@ -1,0 +1,27 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Helper function
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Posts images - anyone can read, authenticated users can write
+    match /posts/{allPaths=**} {
+      allow read: if true; // Anyone can view post images
+      allow write: if isSignedIn(); // Only authenticated users can upload
+    }
+
+    // Avatars - anyone can read, authenticated users can write
+    match /avatars/{allPaths=**} {
+      allow read: if true; // Anyone can view avatars
+      allow write: if isSignedIn(); // Authenticated users can upload
+    }
+
+    // Allow read for all files (for development)
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+  }
+}
