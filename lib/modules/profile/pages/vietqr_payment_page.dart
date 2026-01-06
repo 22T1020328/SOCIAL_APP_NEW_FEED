@@ -35,37 +35,67 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
     setState(() => _isLoading = true);
 
     try {
-      
-      final existingTransaction =
-          await _paymentService.getPendingTransaction(widget.userId);
+      // Kiểm tra xem user đã verify chưa
+      final isAlreadyVerified = await _paymentService.isUserVerified(
+        widget.userId,
+      );
 
-      if (existingTransaction != null) {
-        final transferContent = existingTransaction['transfer_content'] as String;
-        setState(() {
-          _transferContent = transferContent;
-          _qrUrl = _paymentService.generateVietQRUrl(
-            transferContent: transferContent,
+      if (isAlreadyVerified) {
+        // User đã verify rồi, thông báo và đóng page
+        if (mounted) {
+          setState(() => _isLoading = false);
+          await showDialog<void>(
+            context: context,
+            barrierDismissible: false,
+            builder: (context) => AlertDialog(
+              title: const Text('✅ Đã xác minh'),
+              content: const Text(
+                'Tài khoản của bạn đã được xác minh thành công.\n\n'
+                'Bạn không cần thanh toán lại.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Đóng dialog
+                    Navigator.of(context).pop(true); // Đóng payment page
+                  },
+                  child: const Text('Đóng'),
+                ),
+              ],
+            ),
           );
-        });
-      } else {
-        
-        final transferContent = _paymentService.generateTransferContent(widget.userId);
-        final qrUrl = _paymentService.generateVietQRUrl(
-          transferContent: transferContent,
-        );
+        }
+        return;
+      }
 
-        
+      // Luôn lấy mã cố định từ service - đảm bảo mã không thay đổi khi user out/in
+      final transferContent = await _paymentService.getOrCreateTransferContent(
+        widget.userId,
+      );
+
+      // Kiểm tra xem đã có giao dịch pending chưa
+      final existingTransaction = await _paymentService.getPendingTransaction(
+        widget.userId,
+      );
+
+      // Nếu chưa có giao dịch pending, tạo mới
+      if (existingTransaction == null) {
         await _paymentService.createPendingTransaction(
           userId: widget.userId,
           transferContent: transferContent,
           amount: FirebasePaymentService.verificationPrice,
         );
-
-        setState(() {
-          _transferContent = transferContent;
-          _qrUrl = qrUrl;
-        });
       }
+
+      // Tạo QR code với mã cố định
+      final qrUrl = _paymentService.generateVietQRUrl(
+        transferContent: transferContent,
+      );
+
+      setState(() {
+        _transferContent = transferContent;
+        _qrUrl = qrUrl;
+      });
     } catch (e) {
       if (mounted) {
         toast('Lỗi: ${e.toString()}');
@@ -122,23 +152,107 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
         transferContent: _transferContent!,
         amount: FirebasePaymentService.verificationPrice,
       );
-      
+
       if (isPaymentVerified) {
         if (mounted) {
           toast('🎉 Thanh toán thành công! Tài khoản đã được xác minh.');
           Navigator.of(context).pop(true);
         }
       } else {
-        // Kiểm tra xem user đã được verify chưa (có thể đã verify trước đó)
+        // Không tìm thấy payment mới
+        // Kiểm tra xem user đã được verify trước đó chưa
         final isVerified = await _paymentService.isUserVerified(widget.userId);
-        
+
         if (isVerified) {
           if (mounted) {
-            toast('Tài khoản đã được xác minh thành công!');
-            Navigator.of(context).pop(true);
+            // User đã verify rồi, không cần verify lại
+            showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Đã xác minh trước đó'),
+                content: const Text(
+                  'Tài khoản của bạn đã được xác minh thành công trước đó.\n\n'
+                  'Bạn không cần thanh toán lại.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context); // Đóng dialog
+                      Navigator.of(context).pop(true); // Đóng payment page
+                    },
+                    child: const Text('Đóng'),
+                  ),
+                ],
+              ),
+            );
           }
         } else {
-          toast('Chưa tìm thấy giao dịch của bạn.\n\nVui lòng kiểm tra:\n- Đã chuyển khoản chưa?\n- Số tiền đúng chưa?\n- Nội dung chuyển khoản đúng chưa?\n\nĐợi vài phút rồi thử lại.');
+          if (mounted) {
+            // User chưa verify và không tìm thấy payment mới
+            showDialog<void>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Chưa tìm thấy giao dịch'),
+                content: const Text(
+                  'Chưa tìm thấy giao dịch của bạn.\n\n'
+                  'Vui lòng kiểm tra:\n'
+                  '• Đã chuyển khoản chưa?\n'
+                  '• Số tiền đúng: 50,000đ\n'
+                  '• Nội dung chuyển khoản chính xác\n\n'
+                  'Giao dịch thường xuất hiện sau 1-5 phút.\n'
+                  'Hãy đợi và thử lại sau.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Đã hiểu'),
+                  ),
+                ],
+              ),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        final errorMessage = e.toString();
+
+        // Xử lý các loại lỗi khác nhau
+        if (errorMessage.contains('PERMISSION_DENIED') ||
+            errorMessage.contains('permission')) {
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Lỗi quyền truy cập'),
+              content: const Text(
+                'Lỗi quyền truy cập Firestore.\n\n'
+                'Vui lòng liên hệ admin để deploy Firestore rules.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Đóng'),
+                ),
+              ],
+            ),
+          );
+        } else if (errorMessage.contains('network') ||
+            errorMessage.contains('connection')) {
+          toast('⚠️ Lỗi kết nối mạng. Vui lòng kiểm tra internet.');
+        } else {
+          showDialog<void>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Có lỗi xảy ra'),
+              content: Text('Lỗi: ${e.toString()}'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Đóng'),
+                ),
+              ],
+            ),
+          );
         }
       }
     } finally {
@@ -157,13 +271,11 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
     }
 
     setState(() => _isLoading = true);
-    
+
     try {
-      
-      
       if (kIsWeb) {
         final isVerified = await _paymentService.isUserVerified(widget.userId);
-        
+
         if (isVerified) {
           if (mounted) {
             toast('Tài khoản đã được xác minh thành công!');
@@ -171,7 +283,6 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
           }
         } else {
           if (mounted) {
-            
             showDialog<void>(
               context: context,
               builder: (context) => AlertDialog(
@@ -197,29 +308,29 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
         return;
       }
 
-      
       final isPaymentVerified = await _paymentService.checkAndVerifyPayment(
         userId: widget.userId,
         transferContent: _transferContent!,
         amount: FirebasePaymentService.verificationPrice,
       );
-      
+
       if (isPaymentVerified) {
         if (mounted) {
           toast('🎉 Thanh toán thành công! Tài khoản đã được xác minh.');
           Navigator.of(context).pop(true);
         }
       } else {
-        
         final isVerified = await _paymentService.isUserVerified(widget.userId);
-        
+
         if (isVerified) {
           if (mounted) {
             toast('Tài khoản đã được xác minh thành công!');
             Navigator.of(context).pop(true);
           }
         } else {
-          toast('🎉 Chưa nhận được thanh toán. Vui lòng đợi vài phút và thử lại.');
+          toast(
+            '🎉 Chưa nhận được thanh toán. Vui lòng đợi vài phút và thử lại.',
+          );
         }
       }
     } catch (e) {
@@ -242,9 +353,7 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
       appBar: AppBar(
         title: const Text('Nhận Tích Xanh'),
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppTheme.primaryGradient,
-          ),
+          decoration: BoxDecoration(gradient: AppTheme.primaryGradient),
         ),
         foregroundColor: Colors.white,
       ),
@@ -255,7 +364,6 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(
@@ -291,10 +399,7 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
                           const Text(
                             'Tài khoản của bạn sẽ được xác minh và nhận dấu tích xanh uy tín',
                             textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey,
-                              fontSize: 14,
-                            ),
+                            style: TextStyle(color: Colors.grey, fontSize: 14),
                           ),
                         ],
                       ),
@@ -303,19 +408,12 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
 
                   const SizedBox(height: 24),
 
-                  
                   const Text(
                     'Hướng dẫn thanh toán:',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
-                  _buildInstructionStep(
-                    '1',
-                    'Mở ứng dụng ngân hàng của bạn',
-                  ),
+                  _buildInstructionStep('1', 'Mở ứng dụng ngân hàng của bạn'),
                   _buildInstructionStep(
                     '2',
                     'Quét mã QR hoặc chuyển khoản theo thông tin bên dưới',
@@ -331,7 +429,6 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
 
                   const SizedBox(height: 24),
 
-                  
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(
@@ -377,9 +474,14 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
                                         height: 280,
                                         child: Center(
                                           child: CircularProgressIndicator(
-                                            value: loadingProgress.expectedTotalBytes != null
-                                                ? loadingProgress.cumulativeBytesLoaded /
-                                                    loadingProgress.expectedTotalBytes!
+                                            value:
+                                                loadingProgress
+                                                        .expectedTotalBytes !=
+                                                    null
+                                                ? loadingProgress
+                                                          .cumulativeBytesLoaded /
+                                                      loadingProgress
+                                                          .expectedTotalBytes!
                                                 : null,
                                           ),
                                         ),
@@ -391,9 +493,14 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
                                         height: 280,
                                         color: Colors.grey[200],
                                         child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
-                                            const Icon(Icons.error_outline, size: 40, color: Colors.grey),
+                                            const Icon(
+                                              Icons.error_outline,
+                                              size: 40,
+                                              color: Colors.grey,
+                                            ),
                                             const SizedBox(height: 8),
                                             const Text(
                                               'Không thể tải QR code',
@@ -402,7 +509,10 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
                                             const SizedBox(height: 4),
                                             Text(
                                               'Vui lòng kiểm tra kết nối mạng',
-                                              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.grey[600],
+                                              ),
                                             ),
                                           ],
                                         ),
@@ -417,7 +527,6 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
 
                   const SizedBox(height: 16),
 
-                  
                   Card(
                     elevation: 2,
                     shape: RoundedRectangleBorder(
@@ -454,7 +563,8 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
                           _buildInfoRow(
                             'Số tiền',
                             FirebasePaymentService.formatCurrency(
-                                FirebasePaymentService.verificationPrice),
+                              FirebasePaymentService.verificationPrice,
+                            ),
                             FirebasePaymentService.verificationPrice.toString(),
                           ),
                           _buildInfoRow(
@@ -470,7 +580,6 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
 
                   const SizedBox(height: 16),
 
-                  
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -494,7 +603,6 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
 
                   const SizedBox(height: 24),
 
-                  
                   ElevatedButton(
                     onPressed: _isLoading ? null : _confirmPaymentManually,
                     style: ElevatedButton.styleFrom(
@@ -516,7 +624,6 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
 
                   const SizedBox(height: 12),
 
-                  
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(),
                     child: const Text('Hủy'),
@@ -555,10 +662,7 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                text,
-                style: const TextStyle(fontSize: 14),
-              ),
+              child: Text(text, style: const TextStyle(fontSize: 14)),
             ),
           ),
         ],
@@ -566,20 +670,18 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value, String copyValue,
-      {bool isImportant = false}) {
+  Widget _buildInfoRow(
+    String label,
+    String value,
+    String copyValue, {
+    bool isImportant = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey[600],
-            ),
-          ),
+          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
           const SizedBox(height: 4),
           Row(
             children: [
@@ -618,4 +720,3 @@ class _VietQRPaymentPageState extends State<VietQRPaymentPage> {
     );
   }
 }
-

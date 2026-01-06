@@ -24,9 +24,11 @@ service cloud.firestore {
       // TEMPORARY: Allow create any user when signed in (for import)
       allow create: if isSignedIn();
       
-      // Allow user to update their own profile (nhưng không cho sửa is_verified và is_admin)
+      // Allow user to update their own profile (nhưng không cho sửa is_admin)
+      // Cho phép update is_verified nếu chỉ update field đó (từ payment verification)
       allow update: if isOwner(userId) && (
-        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_verified', 'is_admin'])
+        // Không cho sửa is_admin
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(['is_admin'])
       );
       
       // Admin có thể update bất kỳ user nào (bao gồm is_verified)
