@@ -502,6 +502,16 @@ class FirebaseService {
         return true;
       }
 
+      // Kiểm tra like_counts trước khi giảm để tránh âm
+      final postDoc = await _firestore.collection('posts').doc(postId).get();
+      final currentLikeCount = postDoc.data()?['like_counts'] as int? ?? 0;
+      
+      if (currentLikeCount <= 0) {
+        // Nếu đã về 0 thì chỉ xóa like record, không giảm nữa
+        await likeRef.delete();
+        return true;
+      }
+
       await likeRef.delete();
 
       await _firestore.collection('posts').doc(postId).update({

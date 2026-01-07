@@ -17,6 +17,16 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('is_admin', false) == true;
     }
 
+    // Chỉ cho phép thay đổi like_counts theo bước +/-1 và không cho phép âm
+    function isLikeCountChange() {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['like_counts']) &&
+        request.resource.data.like_counts >= 0 &&
+        (
+          request.resource.data.like_counts == resource.data.like_counts + 1 ||
+          request.resource.data.like_counts == resource.data.like_counts - 1
+        );
+    }
+
     // Users collection
     match /users/{userId} {
       allow read: if true; // Anyone can read user profiles
@@ -51,7 +61,11 @@ service cloud.firestore {
       allow read: if true; // Anyone can read posts
       // TEMPORARY: Allow create any post when signed in (for import)
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && 
+      allow update: if isSignedIn() && (
+        (resource.data.user_id == request.auth.uid || isAdmin()) ||
+        isLikeCountChange()
+      );
+      allow delete: if isSignedIn() && 
         (resource.data.user_id == request.auth.uid || isAdmin());
     }
 

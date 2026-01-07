@@ -10,7 +10,6 @@ import '../models/post.dart';
 import '../repos/firebase_like_repo.dart';
 import 'icon_post_comment.dart';
 
-
 class ActionPost extends StatefulWidget {
   final Post post;
 
@@ -43,11 +42,20 @@ class _ActionPostState extends State<ActionPost> {
 
     final oldLiked = oldWidget.post.liked ?? false;
     final newLiked = widget.post.liked ?? false;
-    
-    if (oldLiked != newLiked || oldWidget.post.likeCounts != widget.post.likeCounts) {
+
+    if (oldLiked != newLiked ||
+        oldWidget.post.likeCounts != widget.post.likeCounts) {
+      // If the like state changed but the backend count hasn't updated yet,
+      // adjust optimistically so the UI reflects the action immediately.
+      final backendCount = widget.post.likeCounts ?? 0;
+      final countsChanged = oldWidget.post.likeCounts != widget.post.likeCounts;
+      final optimisticCount = (!countsChanged && oldLiked != newLiked)
+          ? backendCount + (newLiked ? 1 : -1)
+          : backendCount;
+
       setState(() {
-        likeCount = widget.post.likeCounts ?? 0;
-        isLiked = widget.post.liked ?? false;
+        likeCount = optimisticCount;
+        isLiked = newLiked;
       });
     }
   }
@@ -101,17 +109,14 @@ class _ActionPostState extends State<ActionPost> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              TextCountNumber(
-                number: likeCount,
-                subText: 'lượt thích',
-              ),
+              TextCountNumber(number: likeCount, subText: 'lượt thích'),
               TextCountNumber(
                 number: post.commentCounts!,
                 subText: 'bình luận',
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -119,10 +124,10 @@ class _ActionPostState extends State<ActionPost> {
   Future<void> _handleLikePost(bool isLiked) async {
     !isLiked ? await likeBloc.unlike(post.id!) : await likeBloc.like(post.id!);
 
-    final event =
-        !isLiked ? EventName.unLikePostDetail : EventName.likePostDetail;
+    final event = !isLiked
+        ? EventName.unLikePostDetail
+        : EventName.likePostDetail;
 
     AppEventBloc().emitEvent(BlocEvent(event, post.id));
   }
 }
-

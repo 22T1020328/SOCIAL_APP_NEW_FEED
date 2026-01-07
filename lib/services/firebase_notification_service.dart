@@ -1,6 +1,7 @@
 ﻿import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/notification.dart';
+
 //Push notifications với Firebase Cloud Messaging
 class FirebaseNotificationService {
   static final FirebaseNotificationService _instance =
@@ -13,9 +14,7 @@ class FirebaseNotificationService {
 
   String? get currentUserId => _auth.currentUser?.uid;
 
-  
-
-    Future<void> createPostLikeNotification({
+  Future<void> createPostLikeNotification({
     required String postId,
     required String postOwnerId,
   }) async {
@@ -36,7 +35,7 @@ class FirebaseNotificationService {
     });
   }
 
-    Future<void> createCommentLikeNotification({
+  Future<void> createCommentLikeNotification({
     required String commentId,
     required String commentOwnerId,
     required String postId,
@@ -59,7 +58,7 @@ class FirebaseNotificationService {
     });
   }
 
-    Future<void> createCommentNotification({
+  Future<void> createCommentNotification({
     required String postId,
     required String postOwnerId,
     required String commentContent,
@@ -86,7 +85,7 @@ class FirebaseNotificationService {
     });
   }
 
-    Future<void> createFollowNotification({
+  Future<void> createFollowNotification({
     required String followedUserId,
   }) async {
     if (currentUserId == null || currentUserId == followedUserId) return;
@@ -105,51 +104,51 @@ class FirebaseNotificationService {
     });
   }
 
-  
-
-    Stream<List<NotificationModel>> getNotificationsStream() {
+  Stream<List<NotificationModel>> getNotificationsStream() {
     if (currentUserId == null) return Stream.value([]);
 
     return _firestore
         .collection('notifications')
         .where('user_id', isEqualTo: currentUserId)
-        
-        
-        
-        
         .limit(50)
         .snapshots()
         .map((snapshot) {
-      
-      final docs = snapshot.docs.toList()
-        ..sort((a, b) {
-          final aTime = (a.data()['created_at'] as Timestamp?)?.toDate() ?? DateTime(2000);
-          final bTime = (b.data()['created_at'] as Timestamp?)?.toDate() ?? DateTime(2000);
-          return bTime.compareTo(aTime); 
-        });
-      
-      return docs.map((doc) {
-        final data = doc.data();
-        final timestamp = data['created_at'] as Timestamp?;
+          // Sort in-memory để tránh cần composite index
+          final docs = snapshot.docs.toList()
+            ..sort((a, b) {
+              final aTime =
+                  (a.data()['created_at'] as Timestamp?)?.toDate() ??
+                  DateTime(2000);
+              final bTime =
+                  (b.data()['created_at'] as Timestamp?)?.toDate() ??
+                  DateTime(2000);
+              return bTime.compareTo(aTime);
+            });
 
-        return NotificationModel(
-          id: doc.id,
-          userId: data['user_id'] as String? ?? '',
-          actorId: data['actor_id'] as String? ?? '',
-          actorName: data['actor_name'] as String? ?? 'Someone',
-          actorAvatar: data['actor_avatar'] as String?,
-          type: data['type'] as String? ?? 'unknown',
-          postId: data['post_id'] as String?,
-          commentId: data['comment_id'] as String?,
-          content: data['content'] as String?,
-          isRead: data['is_read'] as bool? ?? false,
-          createdAt: timestamp?.toDate().toIso8601String() ?? DateTime.now().toIso8601String(),
-        );
-      }).toList();
-    });
+          return docs.map((doc) {
+            final data = doc.data();
+            final timestamp = data['created_at'] as Timestamp?;
+
+            return NotificationModel(
+              id: doc.id,
+              userId: data['user_id'] as String? ?? '',
+              actorId: data['actor_id'] as String? ?? '',
+              actorName: data['actor_name'] as String? ?? 'Someone',
+              actorAvatar: data['actor_avatar'] as String?,
+              type: data['type'] as String? ?? 'unknown',
+              postId: data['post_id'] as String?,
+              commentId: data['comment_id'] as String?,
+              content: data['content'] as String?,
+              isRead: data['is_read'] as bool? ?? false,
+              createdAt:
+                  timestamp?.toDate().toIso8601String() ??
+                  DateTime.now().toIso8601String(),
+            );
+          }).toList();
+        });
   }
 
-    Stream<int> getUnreadCountStream() {
+  Stream<int> getUnreadCountStream() {
     if (currentUserId == null) return Stream.value(0);
 
     return _firestore
@@ -160,15 +159,13 @@ class FirebaseNotificationService {
         .map((snapshot) => snapshot.docs.length);
   }
 
-  
-
-    Future<void> markAsRead(String notificationId) async {
+  Future<void> markAsRead(String notificationId) async {
     await _firestore.collection('notifications').doc(notificationId).update({
       'is_read': true,
     });
   }
 
-    Future<void> markAllAsRead() async {
+  Future<void> markAllAsRead() async {
     if (currentUserId == null) return;
 
     final batch = _firestore.batch();
@@ -185,11 +182,11 @@ class FirebaseNotificationService {
     await batch.commit();
   }
 
-    Future<void> deleteNotification(String notificationId) async {
+  Future<void> deleteNotification(String notificationId) async {
     await _firestore.collection('notifications').doc(notificationId).delete();
   }
 
-    Future<void> deleteAllNotifications() async {
+  Future<void> deleteAllNotifications() async {
     if (currentUserId == null) return;
 
     final batch = _firestore.batch();
@@ -204,8 +201,6 @@ class FirebaseNotificationService {
 
     await batch.commit();
   }
-
-  
 
   Future<Map<String, dynamic>?> _getUserInfo(String userId) async {
     try {
@@ -224,4 +219,3 @@ class FirebaseNotificationService {
     }
   }
 }
-

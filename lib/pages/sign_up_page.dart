@@ -308,13 +308,13 @@ class _SignUpPageState extends State<SignUpPage> {
                     const SizedBox(height: 30),
                     
                     Text(
-                      'Bằng cách nhấn Đăng ký, bạn đồng ý với các Điều khoản và Điều kiện sau mà không có bất kỳ bảo lưu nào',
+                      'Bằng cách nhấn Đăng ký, bạn đồng ý với các Điều khoản và Điều kiện của chúng tôi.',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.white70,
                         height: 1.5,
                       ),
-                      textAlign: TextAlign.center,
+                      textAlign: TextAlign.center ,
                     ),
                   ],
                 ),
